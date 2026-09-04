@@ -1,0 +1,11 @@
+id = "yuloop.pane-move"
+name = "Pane Move Shortcut"
+version = "0.1.0"
+min_herdr_version = "0.8.0"
+description = "快捷键搬窗格(降级版,无右键菜单,调pane.move/layout.rearrange)"
+platforms = ["linux", "macos", "windows"]
+[[actions]]
+id = "move-pane"
+title = "移动窗格"
+contexts = ["workspace"]
+command = ["bash", "pane-move.sh"]
