@@ -23,11 +23,14 @@ raw_current=$("$BIN" pane current 2>/dev/null) || true
 if [[ -z "$raw_current" ]]; then
   die "无法获取当前窗格，请确认 herdr 正在运行。"
 fi
-current_pane=$(printf '%s' "$raw_current" | jq -r '.result.pane.pane_id // empty' 2>/dev/null)
+current_pane=$(printf '%s' "$raw_current" | jq -r '.result.pane.pane_id // empty' 2>/dev/null) || die "解析失败: jq 错误"
 if [[ -z "${current_pane:-}" ]]; then
   die "无法解析当前窗格 ID，herdr 返回数据异常。"
 fi
-current_tab=$(printf '%s' "$raw_current" | jq -r '.result.pane.tab_id // empty' 2>/dev/null)
+current_tab=$(printf '%s' "$raw_current" | jq -r '.result.pane.tab_id // empty' 2>/dev/null) || die "解析失败: jq 错误"
+if [[ -z "${current_tab:-}" ]]; then
+  die "无法解析当前标签页 ID，herdr 返回数据异常。"
+fi
 
 # 获取所有窗格并解析
 raw_list=$("$BIN" pane list 2>/dev/null) || true
@@ -54,7 +57,7 @@ while IFS=$'\t' read -r pid title tab; do
   else
     descs+=("$title ($tab)")
   fi
-done < <(printf '%s' "$raw_list" | jq -r '.result.panes[] | [.pane_id, (.terminal_title_stripped // .terminal_title // "(无标题)"), .tab_id] | @tsv' 2>/dev/null)
+done < <(printf '%s' "$raw_list" | jq -r '.result.panes[] | [.pane_id, (.terminal_title_stripped // .terminal_title // "(无标题)"), .tab_id] | @tsv' 2>/dev/null || die "解析失败: jq 错误")
 
 if [[ ${#pids[@]} -eq 0 ]]; then
   die "当前无可移动目标窗格（当前窗格: $current_pane）。"
@@ -83,8 +86,8 @@ elif [ -t 0 ]; then
       printf '无效选择，请输入 0-%d 之间的序号。\n' "${#descs[@]}" >&2
       continue
     fi
-    target_pane="${pids[$((REPLY-1))]}"
-    target_tab="${tabs[$((REPLY-1))]}"
+    target_pane="${pids[$((10#$REPLY-1))]}"
+    target_tab="${tabs[$((10#$REPLY-1))]}"
     break
   done
 else
@@ -98,11 +101,11 @@ else
   fi
   if [[ "$REPLY" == "0" ]]; then
     exit 0
-  elif ! [[ "$REPLY" =~ ^[0-9]+$ ]] || [[ -z "${pids[$((REPLY-1))]:-}" ]]; then
+  elif ! [[ "$REPLY" =~ ^[0-9]+$ ]] || [[ -z "${pids[$((10#$REPLY-1))]:-}" ]]; then
     die "无效选择，请输入 0-${#descs[@]} 之间的序号。"
   fi
-  target_pane="${pids[$((REPLY-1))]}"
-  target_tab="${tabs[$((REPLY-1))]}"
+  target_pane="${pids[$((10#$REPLY-1))]}"
+  target_tab="${tabs[$((10#$REPLY-1))]}"
 fi
 
 if [[ -z "$target_pane" || -z "$target_tab" ]]; then
@@ -110,15 +113,14 @@ if [[ -z "$target_pane" || -z "$target_tab" ]]; then
 fi
 
 move_err=$(mktemp)
+trap 'rm -f "$move_err"' EXIT
 raw_move=$("$BIN" pane move "$current_pane" --tab "$target_tab" --split right --target-pane "$target_pane" 2>"$move_err") || true
 if [[ -z "$raw_move" ]]; then
   err_msg=$(<"$move_err")
-  rm -f "$move_err"
   die "搬移窗格失败（源: $current_pane，目标: $target_pane，标签页: $target_tab）。herdr 报错: $err_msg"
 fi
-rm -f "$move_err"
 
-changed=$(printf '%s' "$raw_move" | jq -r '.result.move_result.changed // empty' 2>/dev/null)
+changed=$(printf '%s' "$raw_move" | jq -r '.result.move_result.changed // empty' 2>/dev/null) || die "解析失败: jq 错误"
 if [[ "$changed" == "false" ]]; then
   echo "提示：herdr 返回未实际搬移（源: $current_pane，目标: $target_pane，标签页: $target_tab）。同标签页内 herdr 暂不支持窗格搬移，请使用 swap 交换位置。" >&2
   exit 0
