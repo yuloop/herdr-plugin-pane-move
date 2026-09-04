@@ -114,8 +114,8 @@ fi
 
 move_err=$(mktemp)
 trap 'rm -f "$move_err"' EXIT
-raw_move=$("$BIN" pane move "$current_pane" --tab "$target_tab" --split right --target-pane "$target_pane" 2>"$move_err") || true
-if [[ -z "$raw_move" ]]; then
+raw_move=$("$BIN" pane move "$current_pane" --tab "$target_tab" --split right --target-pane "$target_pane" 2>"$move_err") && move_ok=0 || move_ok=$?
+if [[ $move_ok -ne 0 ]]; then
   err_msg=$(<"$move_err")
   die "搬移窗格失败（源: $current_pane，目标: $target_pane，标签页: $target_tab）。herdr 报错: $err_msg"
 fi
