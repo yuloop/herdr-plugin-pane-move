@@ -27,9 +27,9 @@ current_pane=$(printf '%s' "$raw_current" | jq -r '.result.pane.pane_id // empty
 if [[ -z "${current_pane:-}" ]]; then
   die "无法解析当前窗格 ID，herdr 返回数据异常。"
 fi
-current_tab=$(printf '%s' "$raw_current" | jq -r '.result.pane.tab_id // empty' 2>/dev/null) || die "解析失败: jq 错误"
+current_tab=$(printf '%s' "$raw_current" | jq -r '.result.pane.tab_id // empty' 2>/dev/null) || true
 if [[ -z "${current_tab:-}" ]]; then
-  die "无法解析当前标签页 ID，herdr 返回数据异常。"
+  echo "提示：当前窗格无标签页 ID，将显示所有窗格。" >&2
 fi
 
 # 获取所有窗格并解析
@@ -55,7 +55,7 @@ while IFS=$'\t' read -r pid title tab; do
   fi
   pids+=("$pid")
   tabs+=("$tab")
-  if [[ "$tab" == "$current_tab" ]]; then
+  if [[ -n "$current_tab" && "$tab" == "$current_tab" ]]; then
     descs+=("[同Tab] $title ($tab)")
   else
     descs+=("$title ($tab)")
@@ -104,8 +104,8 @@ else
   fi
   if [[ "$REPLY" == "0" ]]; then
     exit 0
-  elif ! [[ "$REPLY" =~ ^[0-9]+$ ]] || [[ -z "${pids[$((10#$REPLY-1))]:-}" ]]; then
-    die "无效选择，请输入 0-${#descs[@]} 之间的序号。"
+  elif ! [[ "$REPLY" =~ ^[0-9]+$ ]] || [[ "$REPLY" -lt 1 || "$REPLY" -gt "${#descs[@]}" ]]; then
+    die "无效选择，请输入 1-${#descs[@]}，0 取消。"
   fi
   target_pane="${pids[$((10#$REPLY-1))]}"
   target_tab="${tabs[$((10#$REPLY-1))]}"
