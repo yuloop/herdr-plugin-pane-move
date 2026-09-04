@@ -40,6 +40,9 @@ while IFS=$'\t' read -r pid title tab; do
   [[ -z "${pid:-}" ]] && continue
   [[ "$pid" == "$current_pane" ]] && continue
   pids+=("$pid")
+  if [[ -z "${tab:-}" || "$tab" == "null" ]]; then
+    continue
+  fi
   tabs+=("$tab")
   if [[ "${pid%%:*}" == "${current_pane%%:*}" ]]; then
     descs+=("[同Tab] $title ($tab)")
