@@ -121,9 +121,10 @@ if [[ $move_ok -ne 0 ]]; then
   die "搬移窗格失败（源: $current_pane，目标: $target_pane，标签页: $target_tab）。herdr 报错: $err_msg"
 fi
 
-changed=$(printf '%s' "$raw_move" | jq -r '.result.move_result.changed // empty' 2>/dev/null) || die "解析失败: jq 错误"
+changed=$(printf '%s' "$raw_move" | jq -r '.result.move_result.changed // empty' 2>/dev/null) || true
 if [[ "$changed" == "false" ]]; then
-  echo "提示：herdr 返回未实际搬移（源: $current_pane，目标: $target_pane，标签页: $target_tab）。如为同标签页操作，herdr 暂不支持窗格搬移，请使用 swap 交换位置。" >&2
+  echo "提示：herdr 返回未实际搬移（源: $current_pane，目标: $target_pane，标签页: $target_tab）。" >&2
+  printf 'herdr 原始响应: %s\n' "$raw_move" >&2
   exit 0
 elif [[ -z "$changed" && -n "$raw_move" ]]; then
   echo "提示：herdr 返回结果格式异常，无法确认搬移状态，请手动检查。" >&2
