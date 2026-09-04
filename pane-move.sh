@@ -44,11 +44,13 @@ fi
 pids=()
 tabs=()
 descs=()
+skipped_tabless=0
 jq_output=$(printf '%s' "$raw_list" | jq -r '.result.panes[] | [.pane_id, (.terminal_title_stripped // .terminal_title // "(无标题)"), .tab_id] | @tsv' 2>/dev/null) || die "解析失败: jq 错误"
 while IFS=$'\t' read -r pid title tab; do
   [[ -z "${pid:-}" ]] && continue
   [[ "$pid" == "$current_pane" ]] && continue
   if [[ -z "${tab:-}" || "$tab" == "null" ]]; then
+    skipped_tabless=$((skipped_tabless + 1))
     continue
   fi
   pids+=("$pid")
@@ -61,12 +63,12 @@ while IFS=$'\t' read -r pid title tab; do
 done <<< "$jq_output"
 
 if [[ ${#pids[@]} -eq 0 ]]; then
-  die "当前无可移动目标窗格（当前窗格: $current_pane）。"
+  die "当前无可移动目标窗格（当前窗格: $current_pane，已过滤掉 $skipped_tabless 个无标签页的窗格）。"
 fi
 
 target_pane=""
 target_tab=""
-if command -v fzf >/dev/null 2>&1 && [ -t 0 ]; then
+if command -v fzf >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
   fzf_lines=()
   for i in "${!pids[@]}"; do
     fzf_lines+=("${pids[$i]}"$'\t'"${tabs[$i]}"$'\t'"${descs[$i]}")
@@ -97,7 +99,7 @@ else
     printf '%d) %s\n' "$((i+1))" "${descs[$i]}" >&2
   done
   printf '0) 取消\n' >&2
-  if ! read -r REPLY; then
+  if ! read -t 30 -r REPLY; then
     die "非交互终端无法读取选择，请通过交互式界面运行。"
   fi
   if [[ "$REPLY" == "0" ]]; then
@@ -113,7 +115,7 @@ if [[ -z "$target_pane" || -z "$target_tab" ]]; then
   die "未选择目标窗格。"
 fi
 
-move_err=$(mktemp)
+move_err=$(mktemp) || die "无法创建临时文件"
 trap 'rm -f "$move_err"' EXIT
 raw_move=$("$BIN" pane move "$current_pane" --tab "$target_tab" --split right --target-pane "$target_pane" 2>"$move_err") && move_ok=0 || move_ok=$?
 if [[ $move_ok -ne 0 ]]; then
@@ -126,6 +128,10 @@ if [[ "$changed" == "false" ]]; then
   echo "提示：herdr 返回未实际搬移（源: $current_pane，目标: $target_pane，标签页: $target_tab）。" >&2
   printf 'herdr 原始响应: %s\n' "$raw_move" >&2
   exit 0
-elif [[ -z "$changed" && -n "$raw_move" ]]; then
-  echo "提示：herdr 返回结果格式异常，无法确认搬移状态，请手动检查。" >&2
+elif [[ -z "$changed" ]]; then
+  if [[ -n "$raw_move" ]]; then
+    echo "提示：herdr 返回结果格式异常，无法确认搬移状态，请手动检查。" >&2
+  else
+    echo "提示：herdr 未返回搬移结果，假设搬移已成功。" >&2
+  fi
 fi
